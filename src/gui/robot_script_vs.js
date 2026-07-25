@@ -66,7 +66,10 @@
 
 /* ── Configuración ──────────────────────────────────────────────────── */
 const CFG = {
-    broker: '192.168.x.x', // IP local de la PC (igual que en config.py del firmware)
+    // Se deriva del host desde el que se sirvió la GUI — funciona igual en
+    // localhost (Docker local), en la IP de LAN de una demo, o en cualquier
+    // otra máquina, sin editar código antes de cada uso.
+    broker: window.location.hostname,
     port: 9001,            // Puerto WebSocket de Mosquitto (ver mosquitto.conf, listener 2)
     topicCmd: 'robot/cmd',
     topicLog: 'robot/log',

@@ -1,0 +1,12 @@
+# [SEC] Nunca meter secretos ni entornos locales en el contexto de build de la imagen.
+.env
+.env.*
+!.env.example
+venv/
+__pycache__/
+*.pyc
+.git
+.gitignore
+scripts/__pycache__/
+tests/__pycache__/
+.pytest_cache/

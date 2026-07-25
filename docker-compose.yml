@@ -1,0 +1,109 @@
+# ==============================================================================
+# docker-compose.yml — Brazo Robótico Pick & Place, orquestación multiplataforma
+# ==============================================================================
+# Uso normal (con ESP32 físico externo conectándose por su cuenta al broker):
+#   docker compose up --build
+#
+# Uso sin hardware físico (requisito de cátedra — ver docs/refactorizacion.md,
+# Fase 3): el simulador está en un profile aparte para no chocar con un ESP32 real:
+#   docker compose --profile simulate up --build
+#
+# [SEC] Ningún secreto vive en este archivo. mosquitto usa el passwd ya generado
+# con mosquitto_passwd; backend y simulator leen su .env respectivo (ver
+# .env.example en cada subcarpeta). Ver checklist de seguridad en
+# docs/refactorizacion.md, sección 4.
+# ==============================================================================
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: robot-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"   # TCP — usado por un ESP32 físico si se conecta
+      - "9001:9001"   # WebSocket — usado por el navegador (GUI)
+    volumes:
+      # [IMPORTANTE] Se monta mosquitto.docker.conf, NO mosquitto.conf: el original
+      # usa rutas de Windows (C:/...) para el arranque nativo con ARRANCAR_SISTEMA.ps1
+      # y no es válido dentro del contenedor Linux. Ver mosquitto.docker.conf para el
+      # detalle de qué cambia.
+      - ./src/mosquitto-broker/mosquitto.docker.conf:/mosquitto/config/mosquitto.conf:ro
+      - ./src/mosquitto-broker/acl.conf:/mosquitto/config/acl.conf:ro
+      - ./src/mosquitto-broker/passwd:/mosquitto/config/passwd:ro
+      - mosquitto-data:/mosquitto/data
+      - mosquitto-log:/mosquitto/log
+    networks: [robot-net]
+    healthcheck:
+      # [SEC] Se publica a "robot/log" (el único tópico que la ACL de mínimo
+      # privilegio permite escribir al usuario "esp32" — ver acl.conf). Publicar a
+      # un tópico no autorizado sería descartado silenciosamente por el broker en
+      # QoS 0 sin que mosquitto_pub reciba error, dando un falso "healthy".
+      # mosquitto_pub viene incluido en la imagen oficial — no requiere instalar nada extra.
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -p 1883 -t robot/log -m '{\"event\":\"healthcheck\"}' -u esp32 -P \"$${MQTT_ESP32_PWD:?}\" -q 0 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    environment:
+      # Solo usada por el healthcheck de este mismo servicio (no la lee mosquitto.conf).
+      - MQTT_ESP32_PWD=${MQTT_ESP32_PWD:?definir MQTT_ESP32_PWD en el .env raíz}
+
+  backend:
+    build: ./src/backend
+    container_name: robot-backend
+    restart: unless-stopped
+    # [FIX] NO se usa "env_file:" acá a propósito: Docker Compose interpola
+    # (${VAR}) el contenido de los archivos declarados con env_file ANTES de
+    # inyectarlos al contenedor. AUTH_USERS contiene hashes bcrypt con "$2b$12$...",
+    # y cada "$algo" ahí adentro se interpretaba como referencia a una variable —
+    # el hash llegaba mutilado y passlib tiraba "hash could not be identified".
+    # Montando el .env real como archivo, pydantic-settings (config.py, que ya
+    # declara SettingsConfigDict(env_file=".env")) lo lee directo del disco
+    # dentro del contenedor, sin que Compose lo toque.
+    volumes:
+      - ./src/backend/.env:/app/.env:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    networks: [robot-net]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  gui:
+    build: ./src/gui
+    container_name: robot-gui
+    restart: unless-stopped
+    ports:
+      - "5500:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [robot-net]
+
+  simulator:
+    build: ./src/simulator
+    container_name: robot-simulator
+    restart: unless-stopped
+    env_file:
+      - ./src/simulator/.env
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    networks: [robot-net]
+    profiles: ["simulate"]   # NO arranca con `docker compose up` normal — ver encabezado
+    stdin_open: true          # permite detección manual de caja (ENTER) con `docker attach`
+    tty: true
+
+networks:
+  robot-net:
+    driver: bridge
+
+volumes:
+  mosquitto-data:
+  mosquitto-log:

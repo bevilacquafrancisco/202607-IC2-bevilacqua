@@ -1,0 +1,2 @@
+# [SEC] Versión fijada, mismo criterio que requirements.txt del backend.
+paho-mqtt==2.1.0

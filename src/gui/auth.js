@@ -44,7 +44,10 @@
  * a la IP local del backend (la misma IP que usa Mosquitto, ver Fase 1).
  */
 const AUTH_CFG = {
-    apiBase: 'http://localhost:8000',
+    // Mismo criterio que CFG.broker en robot_script.js: se deriva del host
+    // desde el que se sirvió la GUI, para no depender de editar código según
+    // dónde se despliegue.
+    apiBase: `${window.location.protocol}//${window.location.hostname}:8000`,
     storageKeyToken:    'robot_jwt_token',
     storageKeyUsername: 'robot_jwt_username',
     storageKeyExpiry:   'robot_jwt_expiry',   // timestamp ms, calculado client-side
