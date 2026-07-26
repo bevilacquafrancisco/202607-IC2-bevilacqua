@@ -116,8 +116,8 @@ from umqtt.simple import MQTTClient     ## MQTTClient es una clase que implement
 # =============================================================================
  
 WIFI = {
-    "ssid":      "nombre_de_red_wifi",
-    "password":  "contraseña_wifi",
+    "ssid":      "name_wifi",
+    "password":  "password",
     "timeout_s": 20, # Tiempo máximo en segundos que el sistema espera para conectarse a la red WiFi antes de abortar y seguir intentando en el loop principal.
 }
  
@@ -142,7 +142,7 @@ MQTT = {
     # académica, hardcodear en config.py es una limitación aceptada y
     # declarada, no un descuido.
     "user":      b"esp32",
-    "password":  b"password_generada",  # debe coincidir con el passwd del broker
+    "password":  b"francisco",  # debe coincidir con el passwd del broker
 }
  
 # GPIOs seguros (no afectan boot strapping del ESP32)

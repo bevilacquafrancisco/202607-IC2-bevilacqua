@@ -66,7 +66,7 @@
 
 /* ── Configuración ──────────────────────────────────────────────────── */
 const CFG = {
-    broker: '192.168.x.x', // IP local de la PC (igual que en config.py del firmware)
+    broker: window.location.hostname, // IP local de la PC (igual que en config.py del firmware)
     port: 9001,            // Puerto WebSocket de Mosquitto (ver mosquitto.conf, listener 2)
     topicCmd: 'robot/cmd',
     topicLog: 'robot/log',
@@ -87,7 +87,7 @@ const CFG = {
     // no en esta capa de transporte (MQTT). Documentado como decisión de
     // diseño, no como descuido.
     mqttUser: 'gui_operator',
-    mqttPassword: 'gui_operator_pass',
+    mqttPassword: 'password123',  // ← Cambiar a la contraseña real generada con mosquitto_passwd
 };
 
 const RESET_REASONS = {

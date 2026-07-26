@@ -53,7 +53,7 @@ CLIENT_ID = "SIMULATOR_ESP32_" + str(random.randint(1000, 9999))
 
 # Intervalo de detección automática de caja, en segundos. 0 = deshabilitada
 # (solo detección manual vía ENTER).
-SIM_BOX_INTERVAL_S = int(os.environ.get("SIM_BOX_INTERVAL_S", "25"))
+SIM_BOX_INTERVAL_S = int(os.environ.get("SIM_BOX_INTERVAL_S", "5"))
 
 MAX_CAJAS_PALLET = 3
 

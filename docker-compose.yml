@@ -4,14 +4,13 @@
 # Uso normal (con ESP32 físico externo conectándose por su cuenta al broker):
 #   docker compose up --build
 #
-# Uso sin hardware físico (requisito de cátedra — ver docs/refactorizacion.md,
-# Fase 3): el simulador está en un profile aparte para no chocar con un ESP32 real:
+# Uso sin hardware físico (requisito de cátedra): 
+# el simulador está en un profile aparte para no chocar con un ESP32 real:
 #   docker compose --profile simulate up --build
 #
 # [SEC] Ningún secreto vive en este archivo. mosquitto usa el passwd ya generado
 # con mosquitto_passwd; backend y simulator leen su .env respectivo (ver
-# .env.example en cada subcarpeta). Ver checklist de seguridad en
-# docs/refactorizacion.md, sección 4.
+# .env.example en cada subcarpeta). 
 # ==============================================================================
 
 services:

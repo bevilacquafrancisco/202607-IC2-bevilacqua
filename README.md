@@ -51,22 +51,22 @@ en torno a garantizar que ese canal sea confiable, ordenado y seguro**, no solo 
 ## Arquitectura del sistema
 
 ```
-┌─────────────────┐        MQTT (TCP:1883)        ┌──────────────────────┐
-│   ESP32          │ ◄─────────────────────────►  │                       │
-│  (MicroPython)    │   robot/cmd  (sub, QoS 1)     │   Mosquitto Broker    │
-│  Firmware v4.0    │   robot/log  (pub, QoS 0)     │   (privado, con auth) │
-└─────────────────┘                                │   ACL por usuario      │
+┌─────────────────┐        MQTT (TCP:1883)          ┌──────────────────────┐
+│   ESP32         │ ◄─────────────────────────►     │                       │
+│  (MicroPython)  │   robot/cmd  (sub, QoS 1)       │   Mosquitto Broker    │
+│  Firmware v4.0  │   robot/log  (pub, QoS 0)       │   (privado, con auth) │
+└─────────────────┘                                 │   ACL por usuario     │
                                                     └──────────┬────────────┘
                                                                │ MQTT sobre
                                                                │ WebSocket (9001)
                                                                ▼
 ┌──────────────────┐      HTTP/JSON (REST)         ┌──────────────────────┐
-│   Backend Auth     │ ◄─────────────────────────►  │       GUI Web          │
-│   FastAPI + JWT     │   POST /auth/login            │  login.html            │
-│   bcrypt + rate-     │   GET  /auth/verify           │  index.html            │
-│   limit + CORS       │                               │  auth.js + robot_      │
-└──────────────────┘                                │  script.js             │
-                                                    └──────────────────────┘
+│   Backend Auth   │ ◄─────────────────────────►   │       GUI Web        │
+│   FastAPI + JWT  │   POST /auth/login            │  login.html          │
+│   bcrypt + rate- │   GET  /auth/verify           │  index.html          │
+│   limit + CORS   │                               │  auth.js + robot_    │
+└──────────────────┘                               │  script.js           │
+                                                   └──────────────────────┘
                                                           Operador humano
 ```
 
@@ -88,22 +88,27 @@ solo se reescribe la capa de aplicación — la capa de transporte MQTT permanec
 | Capa | Tecnología |
 |---|---|
 | Firmware | MicroPython v1.20.0 sobre ESP32 |
+| Simulador (sin hardware) | Python 3 + `paho-mqtt` — reimplementa el protocolo del firmware |
 | Comunicación | MQTT 3.1.1 (TCP y WebSocket) |
-| Broker | Eclipse Mosquitto (Windows, instancia privada) |
+| Broker | Eclipse Mosquitto 2 |
 | Backend | Python 3 + FastAPI + Uvicorn |
 | Autenticación | JWT (HS256, `python-jose`) + bcrypt (`passlib`) |
 | Frontend | HTML5 + CSS3 + JavaScript vanilla (sin frameworks) |
 | Cliente MQTT (browser) | Paho MQTT JS (vía WebSocket) |
 | Configuración | Pydantic Settings (`.env`) |
+| Contenerización | Docker + Docker Compose (multiplataforma: Windows/Linux/macOS) |
 
 ---
 
 ## Estructura del repositorio
 
 ```
-TP-IC2/
+202607-IC2-bevilacqua/
+├── docker-compose.yml                      # Orquesta broker+backend+GUI (+simulador opcional)
+├── .env.example                            # Variables leídas por docker-compose.yml
 ├── docs/
-│   └── BevilacquaFrancisco_IC-II.docx     # Informe técnico completo de la cátedra
+│   ├── BevilacquaFrancisco_IC-II.docx     # Informe técnico completo de la cátedra
+│   └── refactorizacion.md                  # Plan de dockerización/portabilidad (esta ronda)
 ├── src/
 │   ├── backend/                            # API de autenticación (FastAPI)
 │   │   ├── app/
@@ -113,6 +118,8 @@ TP-IC2/
 │   │   │   └── main.py                     # entry point de la app
 │   │   ├── scripts/
 │   │   │   └── generar_hash_password.py    # utilidad CLI para generar hashes bcrypt
+│   │   ├── Dockerfile                      # imagen del backend (Python 3.11-slim + uvicorn)
+│   │   ├── .dockerignore
 │   │   ├── .env.example                    # plantilla de configuración (sin secretos)
 │   │   ├── generar_passwd.py               # utilidad para el archivo passwd de Mosquitto
 │   │   └── requirements.txt
@@ -123,19 +130,34 @@ TP-IC2/
 │   │   ├── servos.py / sensor.py           # control de hardware
 │   │   ├── commands.py                     # router de comandos entrantes
 │   │   └── state.py / wifi.py
+│   ├── simulator/                          # Simulador de hardware — probar SIN el brazo físico
+│   │   ├── simulate_robot.py               # cliente MQTT que reimplementa el protocolo del firmware
+│   │   ├── Dockerfile
+│   │   ├── requirements.txt                # solo paho-mqtt
+│   │   └── .env.example
 │   ├── gui/                                # Panel de control web
 │   │   ├── login.html / login_script.js / login_style.css
 │   │   ├── index.html
 │   │   ├── auth.js                         # sesión JWT (login, verify, guard)
 │   │   ├── robot_script.js                 # cliente MQTT + lógica de control
-│   │   └── robot_style.css
+│   │   ├── robot_style.css
+│   │   ├── Dockerfile                      # imagen nginx sirviendo la GUI estática
+│   │   ├── nginx.conf
+│   │   └── .dockerignore
 │   ├── mosquitto-broker/
-│   │   ├── mosquitto.conf                  # listeners TCP/WS, auth obligatoria
+│   │   ├── mosquitto.conf                  # listeners TCP/WS, auth obligatoria (arranque nativo Windows)
+│   │   ├── mosquitto.docker.conf           # misma config, rutas Linux (arranque en contenedor)
 │   │   └── acl.conf                        # control de acceso por usuario/tópico
-│   └── ARRANCAR_SISTEMA.ps1                # script de arranque para Windows
+│   ├── arrancar_sistema.sh                 # arranque nativo sin Docker — Linux / macOS
+│   └── ARRANCAR_SISTEMA.ps1                # arranque nativo sin Docker — Windows
 ├── .gitignore
 └── README.md
 ```
+
+> **Nota de portabilidad**: `mosquitto.conf` (rutas `C:/...`) y `ARRANCAR_SISTEMA.ps1` son
+> específicos de arranque nativo en Windows. `mosquitto.docker.conf` y
+> `arrancar_sistema.sh` son sus equivalentes para Linux/macOS y para Docker — ver
+> [Puesta en marcha](#puesta-en-marcha) para cuál usar según el caso.
 
 ---
 
@@ -364,57 +386,34 @@ aceptadas están **declaradas explícitamente**, no ocultas:
 
 ## Puesta en marcha
 
-### 1. Broker MQTT (Mosquitto)
+Resumen rápido — la guía completa y detallada (generación de credenciales paso a paso,
+qué hace cada archivo de configuración, troubleshooting de errores reales) vive en
+[`docs/PUESTA_EN_MARCHA.md`](docs/PUESTA_EN_MARCHA.md).
 
-```powershell
-# Instalar Mosquitto para Windows y ubicar mosquitto.conf / acl.conf
-# (ver src/mosquitto-broker/) en la carpeta de instalación.
-
-# Generar el archivo de credenciales del broker:
-mosquitto_passwd -c passwd esp32
-mosquitto_passwd passwd gui_operator
-
-# Levantar el broker con la configuración del proyecto:
-mosquitto -c mosquitto.conf -v
-```
-
-### 2. Backend de autenticación
+### La vía más rápida: Docker
 
 ```bash
-cd src/backend
-python -m venv venv
-venv\Scripts\activate            # Windows
-pip install -r requirements.txt
-
-copy .env.example .env           # completar JWT_SECRET_KEY y AUTH_USERS
-
-# Generar el hash bcrypt de cada operador:
-python scripts/generar_hash_password.py
-
-# Levantar el backend:
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+cp .env.example .env                              # completar MQTT_ESP32_PWD (texto plano)
+cp src/backend/.env.example src/backend/.env       # completar JWT_SECRET_KEY y AUTH_USERS
+docker compose up --build
 ```
 
-Verificar que responde en `http://localhost:8000/health`.
+Abrir `http://localhost:5500/login.html`. El firmware del ESP32 físico se carga aparte
+(ver `docs/PUESTA_EN_MARCHA.md` § Firmware). Sin el brazo a mano, usar el simulador:
 
-### 3. Firmware (ESP32)
+```bash
+cp src/simulator/.env.example src/simulator/.env   # completar MQTT_PASSWORD (texto plano)
+docker compose --profile simulate up --build simulator
+```
 
-1. Abrir `src/firmware/` en Thonny (o el IDE preferido con soporte MicroPython).
-2. Editar `config.py`: SSID/contraseña de WiFi, IP del broker, credenciales MQTT (`esp32`).
-3. Cargar los módulos al ESP32 y ejecutar `main.py`.
-4. Confirmar en la consola serie que WiFi y MQTT conectan correctamente.
+### Alternativas sin Docker
 
-### 4. GUI
+| | Windows | Linux / macOS |
+|---|---|---|
+| Arranque combinado | `src\ARRANCAR_SISTEMA.ps1` | `./src/arrancar_sistema.sh` |
 
-1. Editar `AUTH_CFG.apiBase` en `auth.js` y `CFG.broker` en `robot_script.js` con las
-   IPs reales de la demo (por defecto apuntan a `localhost` / la IP de la LAN de pruebas).
-2. Servir `src/gui/` como contenido estático (Live Server, `python -m http.server`, o
-   similar) y abrir `login.html`.
-
-### Arranque combinado
-
-`src/ARRANCAR_SISTEMA.ps1` automatiza el levantamiento del broker y el backend en Windows
-para no tener que repetir los pasos manuales en cada demo.
+Detalle completo de ambas rutas, generación de credenciales (bcrypt, `mosquitto_passwd`),
+firmware, y troubleshooting de problemas comunes: **[`docs/PUESTA_EN_MARCHA.md`](docs/PUESTA_EN_MARCHA.md)**.
 
 ---
 
@@ -441,6 +440,7 @@ para no tener que repetir los pasos manuales en cada demo.
 
 ## Documentación adicional
 
-El informe técnico completo entregado a la cátedra —con especificación de requerimientos,
-decisiones de arquitectura (ADRs), diagramas de pines, protocolo de comandos y resultados
-de pruebas— está disponible en [`docs/BevilacquaFrancisco_IC-II.docx`](docs/BevilacquaFrancisco_IC-II.docx).
+| Documento | Contenido |
+|---|---|
+| [`docs/BevilacquaFrancisco_IC-II.pdf`](docs/BevilacquaFrancisco_IC-II.pdf) | Informe técnico completo: requerimientos, ADRs, diagramas de pines, protocolo de comandos, resultados de pruebas |
+| [`docs/PUESTA_EN_MARCHA.md`](docs/PUESTA_EN_MARCHA.md) | Guía exhaustiva de instalación desde cero: generación de credenciales, configuración del broker, Docker y nativo paso a paso, troubleshooting |

@@ -90,7 +90,7 @@ const CFG = {
     // no en esta capa de transporte (MQTT). Documentado como decisión de
     // diseño, no como descuido.
     mqttUser: 'gui_operator',
-    mqttPassword: 'FRANCISCO',
+    mqttPassword: 'password123',  // ← Cambiar a la contraseña real generada con mosquitto_passwd
 };
 
 const RESET_REASONS = {
