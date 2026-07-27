@@ -255,7 +255,7 @@ autentica ante el broker como si fuera el ESP32, usando el mismo usuario `esp32`
 > con una contraseña que no coincide con la que generaste en el paso 3.2, y vas a ver
 > el badge **MQTT** en rojo sin ningún mensaje de error claro.
 
-Abrir `src/gui/robot_script_vs.js` y buscar el bloque `CFG` cerca del principio del
+Abrir `src/gui/robot_script.js` y buscar el bloque `CFG` cerca del principio del
 archivo:
 
 ```javascript
@@ -347,7 +347,7 @@ menos una vez), usar el script combinado en cada sesión de trabajo:
 
 ### 4.4 GUI
 
-> ⚠️ **Antes de servir la GUI**, editar `src/gui/robot_script_vs.js` con la contraseña
+> ⚠️ **Antes de servir la GUI**, editar `src/gui/robot_script.js` con la contraseña
 > real del usuario `gui_operator` (generado en el paso 4.1) — es el mismo paso 3.6 de
 > la Vía Docker, ver el detalle completo ahí. Buscar el bloque `CFG` al inicio del
 > archivo y reemplazar `mqttPassword: 'password'` por tu contraseña real. Con la
@@ -362,7 +362,7 @@ python -m http.server 5500 --directory src/gui       # Python (cualquier SO)
 # o la extensión "Live Server" de VS Code
 ```
 
-Abrir `http://localhost:5500/login.html`. `auth.js` y `robot_script_vs.js` derivan el host
+Abrir `http://localhost:5500/login.html`. `auth.js` y `robot_script.js` derivan el host
 del backend/broker automáticamente desde `window.location` — no hace falta editar IPs a
 mano mientras todo corra en la misma máquina.
 
@@ -593,7 +593,7 @@ broker con la contraseña equivocada y la conexión MQTT falla — sin ningún m
 error explícito en la consola de logs de la GUI, solo el badge en rojo.
 
 **Solución:** ver el paso 3.6 (Docker) / 4.4 (nativo) — editar `CFG.mqttPassword` en
-`src/gui/robot_script_vs.js` con la contraseña real, y si estás en Docker, reconstruir la
+`src/gui/robot_script.js` con la contraseña real, y si estás en Docker, reconstruir la
 imagen de la GUI (`docker compose build gui`) para que tome el cambio.
 
 ---

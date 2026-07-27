@@ -66,7 +66,10 @@
 
 /* ── Configuración ──────────────────────────────────────────────────── */
 const CFG = {
-    broker: window.location.hostname, // IP local de la PC (igual que en config.py del firmware)
+    // Se deriva del host desde el que se sirvió la GUI — funciona igual en
+    // localhost (Docker local), en la IP de LAN de una demo, o en cualquier
+    // otra máquina, sin editar código antes de cada uso.
+    broker: window.location.hostname,
     port: 9001,            // Puerto WebSocket de Mosquitto (ver mosquitto.conf, listener 2)
     topicCmd: 'robot/cmd',
     topicLog: 'robot/log',
@@ -87,7 +90,7 @@ const CFG = {
     // no en esta capa de transporte (MQTT). Documentado como decisión de
     // diseño, no como descuido.
     mqttUser: 'gui_operator',
-    mqttPassword: 'password123',  // ← Cambiar a la contraseña real generada con mosquitto_passwd
+    mqttPassword: 'francisco',  // ← Cambiar a la contraseña real generada con mosquitto_passwd
 };
 
 const RESET_REASONS = {
@@ -230,12 +233,27 @@ function onConnectSuccess() {
     mqtt.subscribe(CFG.topicLog, { qos: 1 });
     enableControls(true);
 
-    // Re-sincronización activa: solicitar status completo tras 2s.
-    // Delay necesario para que el ESP32 procese su propia reconexión.
+    // Re-sincronización activa: solicitar status completo tras 2s de margen
+    // (da tiempo a que el broker termine de entregar mensajes retenidos y a
+    // que, si el ESP32 también se acaba de reconectar, procese su propio
+    // arranque antes de recibir este pedido).
+    //
+    // [FIX] La condición ya NO exige esp32Online === true. esp32Online es
+    // un flag LOCAL de esta pestaña/sesión de la GUI: arranca en false en
+    // cada carga de página y solo se pone en true al recibir un mensaje
+    // del ESP32. Si el operador cierra el navegador (no solo refresca) y
+    // el ESP32 sigue corriendo sin interrupciones, nunca vuelve a emitir
+    // 'online' — por lo que la condición anterior (connected && esp32Online)
+    // jamás se cumplía y este pedido de resync no se enviaba nunca en una
+    // sesión nueva, dejando el panel sin modo ni conteo de pallets hasta
+    // el próximo heartbeat (hasta 20s) o una acción manual. Ahora basta con
+    // que la GUI esté conectada al broker para pedir el status; el propio
+    // handler del evento 'status' (ver handleEvent) ya sincroniza modo,
+    // pallets, servos y sensor con lo que responda el ESP32.
     setTimeout(() => {
-        if (connected) { // <-- CAMBIO CLAVE: Quitamos la restricción && esp32Online
+        if (connected) {
             clog('🔄 Re-sincronizando estado con ESP32...', 'info', 'sys');
-            publish({ cmd: 'status' }, 0); // Esto fuerza al ESP32 a responder con su estado
+            publish({ cmd: 'status' }, 0);
         }
     }, 2000);
 }
@@ -342,6 +360,25 @@ function handleEvent(data) {
         resetActivityTimer();
         // Loguear "Online esperando comandos" solo la primera vez que se detecta
         if (!wasOnline) clog('🟢 ESP32 Online — sistema activo, esperando comandos.', 'info', 'rx');
+
+        // [FIX] Reportar SIEMPRE el contenido del status recibido.
+        // Antes, este evento solo se logueaba la primera vez (dentro del
+        // if (!wasOnline) de arriba) — por eso al presionar "Solicitar
+        // Status" con el sistema ya online, Thonny mostraba "Status
+        // publicado" en el ESP32 pero la consola de la GUI no imprimía
+        // nada: el payload llegaba y se procesaba (métricas, sliders,
+        // pallets), pero nunca se volcaba una línea visible al operador.
+        const p1 = data.pallets ? data.pallets['1'] : null;
+        const p2 = data.pallets ? data.pallets['2'] : null;
+        clog(
+            `📡 Status recibido — Modo: ${data.mode ?? currentMode} | ` +
+            `Brazo: ${armBusy ? 'OCUPADO' : 'Libre'} | ` +
+            `Pallet 1: ${p1 ? `${p1.count}/3${p1.full ? ' (LLENO)' : ''}` : '—'} | ` +
+            `Pallet 2: ${p2 ? `${p2.count}/3${p2.full ? ' (LLENO)' : ''}` : '—'} | ` +
+            `Sensor: ${data.sensor ? 'DETECTADO' : 'Libre'}`,
+            'info', 'rx'
+        );
+
         if (data.mode) syncMode(data.mode);
         if (data.pallets) {
             updatePallet(1, data.pallets['1'].count, data.pallets['1'].full);

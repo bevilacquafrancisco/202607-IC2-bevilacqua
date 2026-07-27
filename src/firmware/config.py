@@ -23,6 +23,18 @@ Dependencias: ninguna (módulo hoja — no importa nada del proyecto).
     Esto es intencional: config.py debe poder importarse desde cualquier
     otro módulo sin riesgo de import circular, porque nunca importa nada
     a su vez.
+
+NOTA [SEC] (ver francisco-ciberseguridad, ROL 1 — Secure Coding):
+    Las credenciales de WIFI y MQTT quedan en texto plano en este archivo.
+    MicroPython no tiene un mecanismo estándar de variables de entorno como
+    Python de servidor (no hay proceso "shell" que las inyecte en tiempo de
+    ejecución). La mitigación real para producción sería un archivo
+    secrets.py separado, agregado a .gitignore del repositorio del firmware,
+    e importado acá con "from secrets import WIFI_PASSWORD, MQTT_PASSWORD".
+    Para esta entrega académica, hardcodear en config.py es una limitación
+    de alcance ACEPTADA y DECLARADA (ver ADR en planificacion.md), no un
+    descuido — mantenida igual que en el robot_main.py original para no
+    introducir cambios de comportamiento durante la modularización.
 ================================================================================
 """
 
@@ -52,7 +64,7 @@ MQTT = {
     # autenticación). Ahora son obligatorias: Mosquitto privado rechaza
     # cualquier conexión sin user/password válidos (allow_anonymous false).
     "user":      b"esp32",
-    "password":  b"password_generada",  # debe coincidir con el passwd del broker
+    "password":  b"francisco",  # debe coincidir con el passwd del broker
 }
 
 # ------------------------------------------------------------------------
@@ -88,8 +100,8 @@ TIMING = {
     "gc_ms":           15000,   # intervalo del garbage collector manual
     "sensor_poll_ms":    100,   # frecuencia de lectura del sensor KY-032
     "sensor_debounce":     5,   # muestras consecutivas para confirmar detección
-    "servo_step_ms":      15,   # ms entre pasos de movimiento suave
-    "servo_step_deg":      2,   # grados por paso (movimiento suave)
+    "servo_step_ms":      25,   # ms entre pasos de movimiento suave
+    "servo_step_deg":      3,   # grados por paso (movimiento suave)
     "wdt_timeout_ms":   8000,   # watchdog software
 }
 
@@ -117,19 +129,19 @@ POS = {
 
     # Zona de recolección (frente al sensor KY-032)
     "recoleccion_aprox":  [180, 12, 90, 90],  # llega con pinza abierta
-    "recoleccion_agarre": [180, 12, 90, 42],  # cierra pinza para agarrar caja
+    "recoleccion_agarre": [180, 12, 90, 40],  # cierra pinza para agarrar caja
 
     # Pallet 1 (Base=110) — posiciones de descarga por nivel de apilado
-    "pallet1_transito": [110, 90, 90, 42],
-    "pallet1_caja1":    [110,  8, 90, 42],
-    "pallet1_caja2":    [110, 20, 102, 42],
-    "pallet1_caja3":    [110, 30, 105, 42],
+    "pallet1_transito": [110, 90, 90, 40],
+    "pallet1_caja1":    [110,  8, 90, 40],
+    "pallet1_caja2":    [110, 20, 102, 40],
+    "pallet1_caja3":    [110, 30, 105, 40],
 
     # Pallet 2 (Base=70) — posiciones de descarga por nivel de apilado
-    "pallet2_transito": [70, 90, 90, 42],
-    "pallet2_caja1":    [70,  8, 90, 42],
-    "pallet2_caja2":    [70, 20, 102, 42],
-    "pallet2_caja3":    [70, 30, 110, 42],
+    "pallet2_transito": [70, 90, 90, 40],
+    "pallet2_caja1":    [70,  8, 90, 40],
+    "pallet2_caja2":    [70, 20, 102, 40],
+    "pallet2_caja3":    [70, 30, 110, 40],
 }
 
 # ------------------------------------------------------------------------
@@ -145,3 +157,4 @@ RESET_REASONS = {
     6: "BROWNOUT_RESET - TENSION INSUFICIENTE (revisar USB)",
     7: "SDIO_RESET",
 }
+
