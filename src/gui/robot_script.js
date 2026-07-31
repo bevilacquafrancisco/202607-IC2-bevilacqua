@@ -838,9 +838,13 @@ function updatePallet(pid, count, full) {
     }
     el(`pallet-card-${pid}`).classList.toggle('full', full);
 
-    // Solo habilitar "Vaciar" si está lleno y no está en pending state
+    // Habilitar "Vaciar" mientras el pallet tenga al menos 1 caja — ya NO
+    // se exige que esté lleno (full). El firmware (commands.py,
+    // _handle_pallet_clear) siempre aceptó vaciar un pallet parcial; esta
+    // restricción vivía solo acá, del lado de la GUI, y se relaja para
+    // permitir al operador retirar cajas manualmente antes de llenarlo.
     const clearBtn = el(`btn-clear-p${pid}`);
-    if (clearBtn && !clearBtn.dataset.pending) clearBtn.disabled = !full;
+    if (clearBtn && !clearBtn.dataset.pending) clearBtn.disabled = (count === 0);
 }
 
 function syncSliders(servos) {

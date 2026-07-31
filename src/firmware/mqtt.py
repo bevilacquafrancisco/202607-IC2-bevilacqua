@@ -183,3 +183,4 @@ def safe_poll():
         state.mqtt_ok = False
         log("MQTT error: {}".format(exc), "ERROR")
         return False
+

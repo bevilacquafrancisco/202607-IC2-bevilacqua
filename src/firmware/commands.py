@@ -43,6 +43,7 @@ from mqtt import mqtt_publish
 from servos import servo_set, move_sequence, pick_and_place
 from sensor import read_sensor, poll_debounced
 from wifi import wifi_is_up
+from storage import mark_dirty
 
 
 # ============================================================================
@@ -204,6 +205,7 @@ def _handle_set_mode(data):
         state.mode = new_mode
         log("Modo cambiado a: {}".format(state.mode), "INFO")
         mqtt_publish({"event": "mode_changed", "mode": state.mode})
+        mark_dirty()  # [PERSISTENCIA] sobrevive a un reset/corte de energía
     else:
         log("Modo desconocido: {}".format(new_mode), "WARNING")
 
@@ -218,6 +220,7 @@ def _handle_servo(data):
     if 1 <= sid <= 4:
         servo_set(sid, angle, smooth=True)
         mqtt_publish({"event": "servo_ack", "id": sid, "angle": angle})
+        mark_dirty()  # [PERSISTENCIA] el ángulo final debe sobrevivir a un reset
     else:
         log("Servo id={} fuera de rango".format(sid), "ERROR")
 
@@ -248,12 +251,27 @@ def _handle_semi_decision(data):
 
 
 def _handle_pallet_clear(data):
-    """Comando {"cmd":"pallet_clear","pallet":1|2} — vaciado confirmado desde la GUI."""
+    """
+    Comando {"cmd":"pallet_clear","pallet":1|2} — vaciado confirmado desde
+    la GUI.
+
+    [DISEÑO] Este handler NO exige pallet_full[pallet_id] == True para
+    aceptar el vaciado — un operador puede vaciar un pallet con 1 o 2
+    cajas (sin llegar a MAX_CAJAS_PALLET) si, por ejemplo, retira cajas
+    manualmente del pallet físico antes de que el sistema lo marque
+    lleno. La única restricción real es que pallet_id sea 1 o 2; vaciar
+    un pallet ya vacío (count=0) es un no-op inofensivo, no un error.
+    (La versión previa de la GUI restringía el botón de vaciado solo a
+    pallets llenos — esa restricción vivía en robot_script.js, no acá;
+    se relajó en la GUI para habilitar este comportamiento ya soportado
+    por el firmware.)
+    """
     pallet_id = int(data.get("pallet", 1))
     if pallet_id in (1, 2):
         state.pallet_count[pallet_id] = 0
         state.pallet_full[pallet_id] = False
         log("Pallet {} vaciado por usuario".format(pallet_id), "INFO")
         mqtt_publish({"event": "pallet_cleared", "pallet": pallet_id})
+        mark_dirty()  # [PERSISTENCIA] sobrevive a un reset/corte de energía
     else:
         log("Pallet id={} invalido".format(pallet_id), "ERROR")

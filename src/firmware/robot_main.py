@@ -116,13 +116,13 @@ from umqtt.simple import MQTTClient     ## MQTTClient es una clase que implement
 # =============================================================================
  
 WIFI = {
-    "ssid":      "name_wifi",
-    "password":  "password",
+    "ssid":      "Bevilacqua",
+    "password":  "Lupewifi1066",
     "timeout_s": 20, # Tiempo máximo en segundos que el sistema espera para conectarse a la red WiFi antes de abortar y seguir intentando en el loop principal.
 }
  
 MQTT = {
-    "broker":    "192.168.x.x",   # IP local de la PC (ver README Fase 1, paso 5)
+    "broker":    "192.168.31.247",   # IP local de la PC (ver README Fase 1, paso 5)
     "port":      1883,
     "keepalive": 60,
     "topic_cmd": b"robot/cmd",
@@ -597,36 +597,68 @@ def pick_and_place(dest_pallet):
 # =============================================================================
  
 def connect_wifi():
-    global wifi
+    """
+    Conecta el ESP32 a la red WiFi configurada en config.WIFI.
+
+    Comportamiento:
+        - Si ya hay una conexión activa (ej. tras un soft-reset que no
+          reinicializó la interfaz), retorna True inmediatamente sin
+          reintentar la conexión — evita un timeout innecesario.
+        - Si no, intenta conectar y espera en polling de 500ms hasta
+          WIFI["timeout_s"] segundos, imprimiendo un "." de progreso cada
+          intento (y salto de línea cada 5s) para feedback visual en Thonny.
+
+    [HW] wifi.active(True) + wifi.connect() es no bloqueante en MicroPython;
+    el polling manual de wifi.isconnected() es el mecanismo estándar para
+    esperar sin congelar el intérprete — a diferencia de un `while True`
+    sin timeout, que dejaría el sistema colgado indefinidamente si el
+    router está apagado.
+
+    Returns:
+        bool: True si la conexión quedó establecida, False si se agotó
+            el timeout o si ocurrió una excepción de hardware/driver.
+    """
     log("Conectando a WiFi '{}'...".format(WIFI["ssid"]), "INFO")
     try:
-        wifi = network.WLAN(network.STA_IF) # crear interfaz WiFi en modo estación (STA)
-        wifi.active(True) # activar la interfaz WiFi
-        if wifi.isconnected(): 
-            log("WiFi ya conectado: {}".format(wifi.ifconfig()[0]), "INFO")
-            return True
-        wifi.connect(WIFI["ssid"], WIFI["password"]) # iniciar conexión a la red WiFi con las credenciales configuradas
-        timeout = WIFI["timeout_s"] * 2 # convertir timeout a número de iteraciones (500ms cada una)
-        dots = 0 # contador para imprimir puntos de progreso cada 500ms mientras se espera la conexión
-        while not wifi.isconnected() and timeout > 0: # esperar a que se establezca la conexión WiFi, verificando cada 500ms
+        state.wifi = network.WLAN(network.STA_IF)
+        state.wifi.active(True)
+
+        if state.wifi.isconnected():
+            current_ssid = state.wifi.config('ssid')
+            if current_ssid == WIFI["ssid"]:
+                log("WiFi ya conectado a '{}': {}".format(current_ssid, state.wifi.ifconfig()[0]), "INFO")
+                return True
+            else:
+                log("Conectado a red distinta ('{}'), reconectando a '{}'...".format(current_ssid, WIFI["ssid"]), "WARNING")
+                state.wifi.disconnect()
+
+        state.wifi.connect(WIFI["ssid"], WIFI["password"])
+
+        # timeout_s * 2 porque cada iteración del polling espera 500ms
+        # (2 iteraciones = 1 segundo real).
+        timeout = WIFI["timeout_s"] * 2
+        dots = 0
+        while not state.wifi.isconnected() and timeout > 0:
             sleep_ms(500)
-            timeout -= 1 # decrementar el contador de timeout
-            dots += 1 # incrementar el contador de puntos para mostrar progreso visual en la consola mientras se espera la conexión
-            if dots % 10 == 0: # cada 10 puntos (5 segundos),
-                print() # imprimir un salto de línea para evitar que los puntos se acumulen en una sola línea y dificulten la lectura del log, creando una nueva línea cada 5 segundos de espera.
-            print(".", end="") # imprimir un punto sin salto de línea para mostrar progreso visual en la consola mientras se espera la conexión WiFi. Cada punto representa 500ms de espera. Se imprime un punto cada 500ms hasta que se establece la conexión o se agota el timeout.
-        print() # imprimir un salto de línea al finalizar la espera para que el siguiente log se imprima en una nueva línea limpia después de los puntos de progreso.
-        if wifi.isconnected():
-            cfg = wifi.ifconfig() # obtener la configuración de red actual, que incluye la dirección IP asignada, la máscara de subred, la puerta de enlace y el servidor DNS. Esto se utiliza para mostrar información útil en el log una vez que se ha establecido la conexión WiFi.
-            log("WiFi OK | IP: {} | GW: {}".format(cfg[0], cfg[2]), "INFO") # imprimir un mensaje de log indicando que la conexión WiFi se ha establecido correctamente, mostrando la dirección IP asignada y la puerta de enlace para confirmar que el dispositivo está conectado a la red y tiene acceso a Internet.
+            timeout -= 1
+            dots += 1
+            if dots % 10 == 0:  # cada 10 puntos (5 segundos) → salto de línea
+                print()
+            print(".", end="")
+        print()
+
+        if state.wifi.isconnected():
+            cfg = state.wifi.ifconfig()  # (ip, mascara, gateway, dns)
+            log("WiFi OK | IP: {} | GW: {}".format(cfg[0], cfg[2]), "INFO")
             return True
-        else:
-            log("Timeout WiFi", "ERROR")
-            return False
+
+        log("Timeout WiFi", "ERROR")
+        return False
+
     except Exception as exc:
         log("Error WiFi: {}".format(exc), "CRITICAL")
         return False
- 
+
 def wifi_is_up():
     # Verifica si la conexión WiFi está activa y conectada.
     return wifi is not None and wifi.isconnected() 

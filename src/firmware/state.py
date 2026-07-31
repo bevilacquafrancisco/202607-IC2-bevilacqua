@@ -93,10 +93,11 @@ class SystemState:
             "al menos una vez", no "exactamente una vez").
 
     Atributos — Timestamps del loop principal (ticks_ms):
-        t_mqtt_poll, t_heartbeat, t_gc, t_sensor (int): última vez que se
-            ejecutó cada tarea periódica. Comparados con ticks_diff() en
-            main.py para decidir si ya corresponde ejecutar la tarea de
-            nuevo, sin bloquear el loop con sleep().
+        t_mqtt_poll, t_heartbeat, t_gc, t_sensor, t_persist (int): última
+            vez que se ejecutó cada tarea periódica. Comparados con
+            ticks_diff() en main.py para decidir si ya corresponde
+            ejecutar la tarea de nuevo, sin bloquear el loop con sleep().
+            t_persist coordina el flush diferido a flash (ver storage.py).
     """
 
     def __init__(self):
@@ -128,6 +129,7 @@ class SystemState:
         self.t_heartbeat = 0
         self.t_gc = 0
         self.t_sensor = 0
+        self.t_persist = 0
 
 
 # Instancia única reutilizada por todo el firmware (Singleton de facto).
@@ -140,7 +142,7 @@ state = SystemState()
 # UTILIDADES DE LOGGING
 # ============================================================================
 # [DECISIÓN DE DISEÑO] log() y log_sep() no tienen un módulo "natural" propio
-# dentro de la lista de 8 archivos solicitada (no hay un logging.py dedicado).
+# dentro de la lista de 8 archivos (no hay un logging.py dedicado).
 # Se ubican acá porque:
 #   1. No dependen de nada (igual que el resto de este archivo).
 #   2. Se usan desde TODOS los demás módulos (wifi, mqtt, servos, sensor,

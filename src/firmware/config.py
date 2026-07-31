@@ -24,17 +24,6 @@ Dependencias: ninguna (módulo hoja — no importa nada del proyecto).
     otro módulo sin riesgo de import circular, porque nunca importa nada
     a su vez.
 
-NOTA [SEC] (ver francisco-ciberseguridad, ROL 1 — Secure Coding):
-    Las credenciales de WIFI y MQTT quedan en texto plano en este archivo.
-    MicroPython no tiene un mecanismo estándar de variables de entorno como
-    Python de servidor (no hay proceso "shell" que las inyecte en tiempo de
-    ejecución). La mitigación real para producción sería un archivo
-    secrets.py separado, agregado a .gitignore del repositorio del firmware,
-    e importado acá con "from secrets import WIFI_PASSWORD, MQTT_PASSWORD".
-    Para esta entrega académica, hardcodear en config.py es una limitación
-    de alcance ACEPTADA y DECLARADA (ver ADR en planificacion.md), no un
-    descuido — mantenida igual que en el robot_main.py original para no
-    introducir cambios de comportamiento durante la modularización.
 ================================================================================
 """
 
@@ -42,8 +31,8 @@ NOTA [SEC] (ver francisco-ciberseguridad, ROL 1 — Secure Coding):
 # WIFI — credenciales y timeout de conexión a la red local
 # ------------------------------------------------------------------------
 WIFI = {
-    "ssid":      "nombre_de_red_wifi",
-    "password":  "contraseña_wifi",
+    "ssid":      "nombre-red",  # nombre de la red WiFi local
+    "password":  "contraseña-red",  # contraseña de la red WiFi local
     # Tiempo máximo en segundos que el sistema espera para conectarse a la
     # red WiFi antes de abortar y reintentar en el loop principal.
     "timeout_s": 20,
@@ -53,7 +42,7 @@ WIFI = {
 # MQTT — broker privado, credenciales y topics
 # ------------------------------------------------------------------------
 MQTT = {
-    "broker":    "192.168.x.x",   # IP local de la PC (ver README Fase 1, paso 5)
+    "broker":    "172.20.x.x",   # IP local de la PC (ver README Fase 1, paso 5)
     "port":      1883,
     "keepalive": 60,
     "topic_cmd": b"robot/cmd",       # Suscripción: comandos entrantes desde la GUI
@@ -103,6 +92,13 @@ TIMING = {
     "servo_step_ms":      25,   # ms entre pasos de movimiento suave
     "servo_step_deg":      3,   # grados por paso (movimiento suave)
     "wdt_timeout_ms":   8000,   # watchdog software
+    # [PERSISTENCIA] Intervalo de flush a flash del estado marcado "dirty"
+    # (modo, pallets, ángulos de servo — ver storage.py). No es el
+    # intervalo en que se GENERAN cambios (esos se marcan al instante con
+    # storage.mark_dirty(), costo despreciable) sino cada cuánto se
+    # materializan a flash como máximo. 5s acota la ventana de pérdida
+    # ante un corte de energía sin desgastar la flash en cada evento.
+    "persist_ms":       5000,
 }
 
 # WDT: False=desarrollo con Thonny, True=producción sin Thonny.
@@ -157,4 +153,3 @@ RESET_REASONS = {
     6: "BROWNOUT_RESET - TENSION INSUFICIENTE (revisar USB)",
     7: "SDIO_RESET",
 }
-

@@ -52,8 +52,13 @@ def connect_wifi():
         state.wifi.active(True)
 
         if state.wifi.isconnected():
-            log("WiFi ya conectado: {}".format(state.wifi.ifconfig()[0]), "INFO")
-            return True
+            current_ssid = state.wifi.config('ssid')
+            if current_ssid == WIFI["ssid"]:
+                log("WiFi ya conectado a '{}': {}".format(current_ssid, state.wifi.ifconfig()[0]), "INFO")
+                return True
+            else:
+                log("Conectado a red distinta ('{}'), reconectando a '{}'...".format(current_ssid, WIFI["ssid"]), "WARNING")
+                state.wifi.disconnect()
 
         state.wifi.connect(WIFI["ssid"], WIFI["password"])
 

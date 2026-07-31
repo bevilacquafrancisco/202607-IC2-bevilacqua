@@ -31,6 +31,7 @@ from time import sleep_ms
 from config import PINS, PWM_FREQ, PWM_MIN_DUTY, PWM_MAX_DUTY, POS, TIMING, MAX_CAJAS_PALLET
 from state import state, log
 from mqtt import mqtt_publish
+from storage import mark_dirty
 
 # Instancias de PWM por servo: {1: PWM, 2: PWM, 3: PWM, 4: PWM}.
 # Vive como variable de módulo (no en state.py) porque es un HANDLE de
@@ -113,7 +114,27 @@ def servo_idle(servo_id):
 
 def init_servos():
     """
-    Inicializa los 4 servos PWM en sus GPIOs y los lleva a posición HOME.
+    Inicializa los 4 servos PWM en sus GPIOs y los lleva a posición HOME
+    con un barrido SUAVE, igual que cualquier otro movimiento del sistema.
+
+    [HW/SEC — por qué NO se hace pwm.duty(angle_to_duty(90)) acá]
+    Versiones previas comandaban cada servo directo a 90° al crear el
+    canal PWM, ANTES de llamar a move_sequence("home"). Como
+    state.servo_angle ya arrancaba en {90,90,90,90} por defecto, cuando
+    move_sequence("home") corría después no encontraba ninguna diferencia
+    que barrer (current == target == 90) — el "home suave" era en los
+    hechos un salto instantáneo disfrazado de suave.
+
+    El problema de fondo es que un SG90 no tiene encoder: el firmware no
+    tiene forma de leer su posición física real. Asumir 90° como punto de
+    partida es además una suposición FALSA la mayoría de las veces — el
+    ciclo normal de pick_and_place() termina con la base en 180°, no en
+    home (ver su paso 9). Por eso este módulo NO comanda ningún ángulo
+    directamente acá: se deja que state.servo_angle (restaurado desde
+    flash por storage.load_state(), llamado en main.py ANTES de esta
+    función) sea el punto de partida real del barrido. Si es el primer
+    arranque del dispositivo (sin estado persistido todavía), el default
+    de SystemState sigue siendo 90 — caso trivial, documentado, aceptable.
 
     Returns:
         bool: True si los 4 servos se inicializaron y llegaron a HOME
@@ -128,13 +149,20 @@ def init_servos():
     ]
     try:
         for sid, gpio in pin_ids:
+            # No se escribe duty acá: el canal PWM queda sin comandar
+            # hasta que move_sequence("home") emita el primer paso del
+            # barrido suave más abajo — ese es el único punto del sistema
+            # que decide el primer ángulo real que reciben los servos.
             pwm = PWM(Pin(gpio), freq=PWM_FREQ)
-            pwm.duty(angle_to_duty(90))  # posición neutral de arranque
             servo_pwm[sid] = pwm
-            log("  Servo {} ({}) -> GPIO {} OK".format(sid, SERVO_NAMES[sid], gpio), "DEBUG")
+            log("  Servo {} ({}) -> GPIO {} listo (sin comandar aun)".format(
+                sid, SERVO_NAMES[sid], gpio), "DEBUG")
 
-        sleep_ms(500)
-        log("Moviendo a HOME...", "INFO")
+        sleep_ms(300)
+        log("Homing suave hacia HOME desde ultimo angulo conocido "
+            "(base={} hombro={} codo={} pinza={})...".format(
+                state.servo_angle[1], state.servo_angle[2],
+                state.servo_angle[3], state.servo_angle[4]), "INFO")
         move_sequence("home")
         log("Servos inicializados en HOME", "INFO")
         return True
@@ -231,6 +259,13 @@ def move_sequence(action):
     log("Movimiento completado: {}".format(action), "INFO")
     mqtt_publish({"event": "move_done", "action": action})
     state.arm_busy = False
+
+    # [PERSISTENCIA] Checkpoint: el brazo está en reposo y state.servo_angle
+    # ya refleja la posición final real. Se marca dirty acá (no en cada
+    # paso intermedio del barrido suave) para no meter I/O de flash en
+    # medio del movimiento — ver storage.py, sección "por qué escritura
+    # diferida".
+    mark_dirty()
 
 
 def pick_and_place(dest_pallet):
@@ -332,7 +367,16 @@ def pick_and_place(dest_pallet):
         log("ERROR en Pick&Place: {}".format(exc), "CRITICAL")
         mqtt_publish({"event": "error", "msg": str(exc)})
         state.arm_busy = False
+        # [PERSISTENCIA] Aunque la secuencia falló a mitad de camino, tanto
+        # los ángulos de servo alcanzados hasta el error como un eventual
+        # pallet_count ya incrementado (si el fallo ocurrió después del
+        # paso 9) deben poder sobrevivir a un reset — se marca dirty igual.
+        mark_dirty()
         return False
 
     state.arm_busy = False
+    # [PERSISTENCIA] Checkpoint: pallet_count/pallet_full actualizados y
+    # brazo de vuelta en reposo en la zona de recolección — estado final
+    # coherente listo para persistir.
+    mark_dirty()
     return True

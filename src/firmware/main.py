@@ -71,6 +71,7 @@ from mqtt import connect_mqtt, safe_poll
 from servos import init_servos
 from sensor import init_sensor
 from commands import on_message, publish_status, process_sensor_event
+from storage import load_state, save_state, flush_if_dirty
 
 
 # ============================================================================
@@ -120,6 +121,24 @@ def _shutdown():
     """
     log("Apagando sistema...", "INFO")
 
+    # [PERSISTENCIA] Flush incondicional (no depende del dirty flag) ANTES
+    # de mover el brazo: si algo falla en move_transito()/servo_set() más
+    # abajo, igual queremos haber guardado el último estado conocido. Va
+    # envuelto en try/except como el resto de esta rutina de emergencia —
+    # un fallo de escritura a flash no debe impedir el resto del apagado
+    # seguro (llevar el brazo a HOME, avisar 'offline' al broker).
+    #try:
+    #    save_state()
+    #except Exception:
+    #    pass
+    if state.client is not None:
+            try:
+                from mqtt import mqtt_publish
+                mqtt_publish({"event": "offline"})
+                state.client.disconnect()
+            except Exception:
+                pass
+
     # Import local (no al inicio del archivo) para evitar acoplar main.py
     # a los internals de servos.py más de lo necesario para esta única
     # rutina de emergencia.
@@ -163,6 +182,15 @@ def main():
     """
     print_boot_info()
 
+    # [PERSISTENCIA] Debe ejecutarse ANTES de init_servos(): el homing
+    # suave al arranque (ver servos.init_servos) parte de
+    # state.servo_angle, que acá se restaura con el último ángulo real
+    # conocido de cada servo. También restaura mode, pallet_count y
+    # pallet_full — si esta llamada no encuentra estado previo (primer
+    # arranque) o el archivo está corrupto, deja los defaults de
+    # SystemState.__init__ sin abortar el boot (ver storage.load_state).
+    load_state()
+
     if not init_servos():
         log("Fallo critico en servos", "CRITICAL")
         return
@@ -189,6 +217,7 @@ def main():
     state.t_heartbeat = now
     state.t_gc = now
     state.t_sensor = now
+    state.t_persist = now
 
     try:
         while True:
@@ -245,7 +274,15 @@ def main():
                 log("GC: {} -> {} bytes".format(before, after), "DEBUG")
                 state.t_gc = now
 
-            # 6. Ceder ciclos al RTOS — ahorro de energía, no bloquea WDT.
+            # 6. Persistencia diferida — flushea a flash SOLO si hubo
+            #    cambios desde el último flush (mode/pallets/servo_angle
+            #    marcados dirty por commands.py o servos.py). Ver
+            #    storage.py para la justificación de este patrón.
+            if ticks_diff(now, state.t_persist) >= TIMING["persist_ms"]:
+                flush_if_dirty()
+                state.t_persist = now
+
+            # 7. Ceder ciclos al RTOS — ahorro de energía, no bloquea WDT.
             idle()
 
     except KeyboardInterrupt:

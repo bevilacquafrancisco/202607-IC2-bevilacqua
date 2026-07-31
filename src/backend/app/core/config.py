@@ -107,6 +107,5 @@ def load_settings() -> Settings:
         sys.exit(1)
 
 
-# Instancia única reutilizada por toda la app (patrón Singleton de facto,
-# ver SKILLS.md sección 3 — patrones de diseño aplicables).
+# Instancia única reutilizada por toda la app (patrón Singleton de facto).
 settings = load_settings()
