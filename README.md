@@ -21,7 +21,8 @@ Autor: Francisco Bevilacqua
 11. [Puesta en marcha](#puesta-en-marcha)
 12. [Modos de operación](#modos-de-operación)
 13. [Limitaciones conocidas y trabajo futuro](#limitaciones-conocidas-y-trabajo-futuro)
-14. [Documentación adicional](#documentación-adicional)
+14. [Deuda técnica](#deuda-técnica)
+15. [Documentación adicional](#documentación-adicional)
 
 ---
 
@@ -435,6 +436,36 @@ firmware, y troubleshooting de problemas comunes: **[`docs/PUESTA_EN_MARCHA.md`]
   servidor).
 - Rate limiting distribuido (Redis) si el backend escalara a múltiples workers.
 - Refresh tokens para evitar que el operador deba reloguearse al expirar la sesión.
+
+---
+
+## Deuda técnica
+
+Esta sección documenta, de forma explícita y priorizada, las funcionalidades y mejoras
+identificadas como pendientes tras la defensa oral del proyecto (aprobada). A diferencia
+de la sección anterior —limitaciones de **seguridad** aceptadas por alcance— acá se listan
+capacidades **funcionales y de proceso** que quedan fuera del alcance de esta entrega,
+pero que corresponden a la evolución natural del sistema hacia un caso de uso productivo.
+
+### 1. Deuda funcional / hardware (evolución del sistema físico)
+
+Identificada ante la cátedra como trabajo futuro del proyecto una vez aprobado:
+
+| Ítem | Descripción | Impacto si no se resuelve |
+|---|---|---|
+| **Cinta transportadora** | Automatizar la entrega/retiro de cajas hacia y desde los pallets, eliminando la intervención manual que hoy requiere el operador para reponer cajas frente al sensor KY-032 y para retirarlas de los pallets una vez llenos. | El ciclo de trabajo depende de un operador humano en el extremo físico del sistema — el pick & place es autónomo, pero la logística de entrada/salida de cajas no lo es. |
+| **Cámara de visión artificial** | Incorporar una cámara para: (a) detectar y clasificar los objetos a recolectar (hoy el KY-032 solo informa presencia/ausencia, sin distinguir tipo, tamaño ni orientación de la caja); (b) asistir la calibración de posiciones del brazo; (c) verificar cantidad real de cajas depositadas en cada pallet y su alineación, como control cruzado independiente del conteo por software (`state.pallet_count`). | El conteo de pallets es puramente lógico (incrementado por software tras cada `pick_and_place` exitoso) — no hay verificación física independiente de que la caja efectivamente quedó bien depositada y alineada. Un fallo mecánico silencioso (ej. caja caída fuera del pallet) no sería detectado por el sistema actual. |
+| **Sensores de confirmación de agarre** | Agregar sensores en la pinza (ej. sensor de fuerza/presión, o un microswitch de cierre) que confirmen que la caja fue efectivamente sujetada antes de continuar la secuencia de `pick_and_place`, en vez de asumir el agarre exitoso tras comandar el cierre de la pinza (`servo_set(4, ..., smooth=False)` en `servos.py`). | El firmware actual no tiene forma de distinguir "la pinza se cerró sobre una caja" de "la pinza se cerró en el aire" — un fallo de agarre pasaría desapercibido y el brazo ejecutaría el resto de la secuencia (tránsito, depósito) sin carga real, incrementando el contador de pallet igualmente. |
+
+### 2. Deuda de proceso (observada en la corrección del profesor)
+
+Puntos señalados en la devolución de la corrección — el trabajo funcional fue aprobado
+sin objeciones; lo pendiente es exclusivamente de flujo de trabajo e infraestructura:
+
+| Ítem | Descripción | Acción pendiente |
+|---|---|---|
+| **Flujo de Pull Request** | El repositorio usa ramas reales (`legacy`, `refactor/docker-portabilidad`), pero los merges a `main` se hicieron con comandos locales (`git merge`) en vez de a través de un Pull Request en GitHub — no queda historial de revisión asociado a los merges. | A partir de esta entrega, todo cambio a `main` sigue el flujo `rama → Pull Request → revisión → merge`, sin excepciones, incluso para cambios propios sin un segundo revisor disponible (deja registro auditable del proceso). |
+| **Pin de versión exacta de la imagen del broker** | `docker-compose.yml` fija `eclipse-mosquitto:2` (versión mayor), no un patch exacto. Evita el riesgo de `:latest`, pero no garantiza reproducibilidad total: qué build 2.x se use depende de qué esté disponible en el registry el día que se ejecuta `docker compose up`. | Fijar el patch exacto (ej. `eclipse-mosquitto:2.0.18`) en `docker-compose.yml`, verificando primero que esa versión sea compatible con las opciones ya usadas en `mosquitto.docker.conf` y `acl.conf`. |
 
 ---
 
